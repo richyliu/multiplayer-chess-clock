@@ -1,21 +1,20 @@
 module Main where
 
 import Prelude
-
 import Control.Monad.Reader.Class (class MonadAsk, ask, asks)
 import Control.Monad.Reader.Trans (ReaderT, runReaderT)
 import Data.Array (reverse)
 import Data.Array.NonEmpty as NE
 import Data.Either (Either(..))
 import Data.Foldable (fold)
-import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Maybe (Maybe(..))
 import Data.Number (fromString)
 import Data.Number.Format (toString)
 import Data.String (split)
 import Data.String.Pattern (Pattern(..))
 import Data.Time.Duration (Milliseconds(..))
 import Effect (Effect)
-import Effect.Aff (Aff, runAff_, makeAff)
+import Effect.Aff (Aff, runAff_, makeAff, delay)
 import Effect.Aff.Class (class MonadAff, liftAff)
 import Effect.Class (class MonadEffect, liftEffect)
 import Effect.Console as Console
@@ -29,6 +28,16 @@ newtype Timer
   { active :: TimeControl
   , rest :: Array TimeControl
   }
+
+instance timerShow :: Show Timer where
+  show (Timer { active, rest }) =
+    "Active: " <> show active <> "\n"
+      <> fold ((_ <> "\n") <<< show <$> rest)
+
+tickActive :: Milliseconds -> Timer -> Timer
+tickActive delta (Timer timer) = Timer timer { active = updated timer.active }
+  where
+  updated (TimeControl tc) = TimeControl tc { timeRemaining = tick delta tc.timeRemaining }
 
 nextPlayer :: Timer -> Timer
 nextPlayer (Timer { active, rest }) =
@@ -44,6 +53,9 @@ newtype TimeControl
   , timeRemaining :: TimeRemaining
   }
 
+instance timeControlShow :: Show TimeControl where
+  show (TimeControl { player, timeRemaining }) = show player <> ": " <> show timeRemaining
+
 mkTimer :: NE.NonEmptyArray Player -> TimeRemaining -> Timer
 mkTimer players initialTime =
   let
@@ -55,16 +67,12 @@ mkTimer players initialTime =
 newtype TimeRemaining
   = TimeRemaining Milliseconds
 
--- Subtracts delta time from the time remaining. Returns Nothing if time reaches 0
-tick :: Milliseconds -> TimeRemaining -> Maybe TimeRemaining
-tick (Milliseconds delta) (TimeRemaining (Milliseconds ms)) =
-  let
-    newTime = ms - delta
-  in
-    if newTime <= 0.0 then
-      Nothing
-    else
-      Just $ TimeRemaining $ Milliseconds newTime
+instance timeShow :: Show TimeRemaining where
+  show (TimeRemaining (Milliseconds ms)) = toString (round ms / 1000.0) <> "s"
+
+-- Subtracts delta time from the time remaining. Time cannot be less than 0
+tick :: Milliseconds -> TimeRemaining -> TimeRemaining
+tick (Milliseconds delta) (TimeRemaining (Milliseconds ms)) = TimeRemaining $ Milliseconds $ max 0.0 $ ms - delta
 
 data TimeRemainingError
   = NegativeTimeRemaining
@@ -73,9 +81,6 @@ mkTimeRemaining :: Number -> Either TimeRemainingError TimeRemaining
 mkTimeRemaining sec
   | sec < 0.0 = Left NegativeTimeRemaining
   | otherwise = Right <<< TimeRemaining <<< Milliseconds $ sec
-
-instance timeShow :: Show TimeRemaining where
-  show (TimeRemaining (Milliseconds ms)) = toString (round ms / 1000.0) <> "s"
 
 newtype Player
   = Player
@@ -99,25 +104,36 @@ class
   getPlayers :: m (NE.NonEmptyArray Player)
   getTimeLimit :: m TimeRemaining
 
+class
+  (Monad m) <= GetTime m where
+  wait :: Milliseconds -> m Unit
+
 -- Business logic that uses these capabilities
 -- which makes it easier to test
 program ::
   forall m.
   LogToScreen m =>
   GetSettings m =>
+  GetTime m =>
   m Unit
 program = do
   names <- getPlayers
   timeLimit <- getTimeLimit
   log $ "Names: " <> (fold $ show <$> names)
   log $ "Time limit: " <> show timeLimit
-  pure unit
+  let
+    delta = Milliseconds 1000.0
+
+    update timer = do
+      wait delta
+      log $ show timer
+      update $ tickActive delta timer
+  update $ mkTimer names timeLimit
 
 -- Layer 2 (Production)
 -- Environment type
 type Environment
-  = { someValue :: Int
-    , getInput :: String -> Aff String
+  = { getInput :: String -> Aff String
     }
 
 -- newtyped ReaderT that implements the capabilities
@@ -153,16 +169,19 @@ instance getSettingsAppM :: GetSettings AppM where
     env <- ask
     namesRaw <- liftAff $ env.getInput "Enter player names separated by a comma: "
     let
-      namesSplit = Player <<< { name: _ } <$> split (Pattern ",") namesRaw
-
-      defaultPlayer = NE.singleton $ Player { name: "Unnamed" }
-    pure $ fromMaybe defaultPlayer (NE.fromArray namesSplit)
+      players = Player <<< { name: _ } <$> split (Pattern ",") namesRaw
+    case NE.fromArray players of
+      Just p -> pure p
+      Nothing -> getPlayers
   getTimeLimit = do
     env <- ask
-    timeRaw <- liftAff $ env.getInput "Enter time limit per player: "
-    let
-      time = fromMaybe 5000.0 $ fromString timeRaw
-    pure $ TimeRemaining $ Milliseconds time
+    timeRaw <- liftAff $ env.getInput "Enter time limit in seconds per player: "
+    case fromString timeRaw of
+      Just sec -> pure $ TimeRemaining $ Milliseconds (sec * 1000.0)
+      Nothing -> getTimeLimit
+
+instance getTimeAppM :: GetTime AppM where
+  wait = liftAff <<< delay
 
 -- Layer 0 (production)
 main :: Effect Unit
@@ -170,8 +189,7 @@ main = do
   interface <- NR.createConsoleInterface NR.noCompletion
   let
     env =
-      { someValue: 1
-      , getInput: prompt interface
+      { getInput: prompt interface
       }
 
     cleanup _ = NR.close interface
