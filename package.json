@@ -4,13 +4,15 @@
   "description": "Multiplayer chess clock webapp written with Purecsript",
   "scripts": {
     "start": "npm run bundle-css && concurrently npm:serve-*",
-    "serve-js": "parcel public/index.html --no-source-maps --open",
+    "serve-js": "rm -rf ./dist; parcel public/index.html --no-source-maps --open",
     "serve-purs": "spago build --watch",
-    "build": "npm run bundle-css && npm run bundle-purs && npm run bundle-js",
+    "build": "npm run bundle-css && npm run bundle-purs && npm run bundle-js && npm run clean-purs",
     "bundle-css": "npx tailwindcss build -o public/tailwind.css",
     "bundle-purs": "spago bundle-app --to out.js",
-    "bundle-js": "parcel build public/index.html --no-source-maps",
-    "prod": "rm -rf ./dist; NODE_ENV=production npm run bundle-css && npm run bundle-purs && npm run bundle-js"
+    "clean-purs": "rm out.js",
+    "bundle-js": "rm -rf ./dist; parcel build public/index.html --no-source-maps",
+    "prod": "NODE_ENV=production npm run bundle-css && npm run bundle-purs && npm run bundle-js && npm run clean-purs",
+    "clean": "rm -r output/; rm -rf dist/; rm -rf .cache/; rm public/tailwind.css; rm out.js"
   },
   "license": "MIT",
   "dependencies": {
