@@ -8,8 +8,10 @@ You can edit this file as you like.
   , "datetime"
   , "effect"
   , "halogen"
+  , "halogen-subscriptions"
   , "lists"
   , "node-readline"
+  , "now"
   , "numbers"
   , "psci-support"
   ]

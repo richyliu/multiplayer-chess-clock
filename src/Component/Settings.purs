@@ -1,8 +1,11 @@
 module Component.Settings where
 
 import AppPrelude
-import Data.Array.NonEmpty (NonEmptyArray, singleton)
+
+import Data.Array.NonEmpty (NonEmptyArray, singleton, fromArray)
+import Data.Number (fromString)
 import Data.Player (Player)
+import Data.String (Pattern(..), split)
 import Data.Time.Duration (Milliseconds(..))
 import Data.Timer (Timer, mkTimer)
 import Halogen as H
@@ -13,11 +16,17 @@ import Util (class_)
 
 type State
   = { players :: NonEmptyArray Player
-    , timeLimit :: Milliseconds
+    , timeLimit :: Either TimeLimitError Milliseconds
     }
 
+data TimeLimitError
+  = TimeLimitNotANumber
+  | TimeLimitNonPositive
+  | TimeLimitEmpty
+
 data Action
-  = TestInput String
+  = ChangePlayerNames String
+  | ChangeTimeLimit String
   | Submit
 
 type Output
@@ -34,7 +43,7 @@ component =
   initialState :: input -> State
   initialState _ =
     { players: singleton { name: "" }
-    , timeLimit: Milliseconds 1000.0
+    , timeLimit: Left TimeLimitEmpty
     }
 
   render :: State -> H.ComponentHTML Action () m
@@ -45,10 +54,32 @@ component =
           [ class_ [ "text-2xl", "font-light" ] ]
           [ HH.text "Settings component" ]
       , HH.p_ [ HH.text $ fold $ show <$> state.players ]
-      , HH.input
-          [ HP.placeholder "hello"
-          , HE.onValueInput TestInput
-          , class_ [ "px-1", "my-2", "border", "border-gray-300" ]
+      , HH.div []
+          [ HH.input
+              [ HP.placeholder "Time per person (sec)"
+              , HE.onValueInput ChangeTimeLimit
+              , class_ [ "px-1", "my-2", "border", "border-gray-300" ]
+              ]
+          , HH.span
+              [ class_
+                  [ "ml-2"
+                  , "text-sm"
+                  , "text-red-700"
+                  ]
+              ]
+              [ HH.text
+                  $ case state.timeLimit of
+                      Left TimeLimitNonPositive -> "Time limit must be positive"
+                      Left TimeLimitNotANumber -> "Time limit must be a number"
+                      _ -> ""
+              ]
+          ]
+      , HH.div []
+          [ HH.input
+              [ HP.placeholder "Names (separated by comma)"
+              , HE.onValueInput ChangePlayerNames
+              , class_ [ "px-1", "my-2", "border", "border-gray-300" ]
+              ]
           ]
       , HH.button
           [ class_
@@ -70,7 +101,25 @@ component =
 
   handleAction :: Action -> H.HalogenM State Action () Output m Unit
   handleAction = case _ of
-    TestInput s -> H.modify_ \state -> state { players = singleton { name: s } }
+    ChangePlayerNames s ->
+      H.modify_ \state ->
+        state
+          { players =
+            case fromArray (split (Pattern ",") s) of
+              Just names -> { name: _ } <$> names
+              Nothing -> singleton { name: s }
+          }
+    ChangeTimeLimit s -> H.modify_ \state -> state { timeLimit = newLimit }
+      where
+      newLimit = case fromString s of
+        Just timeLimit ->
+          if timeLimit > 0.0 then
+            Right $ Milliseconds timeLimit
+          else
+            Left TimeLimitNonPositive
+        Nothing -> Left TimeLimitNotANumber
     Submit -> do
       state <- H.get
-      H.raise $ mkTimer state.timeLimit state.players
+      case state of
+        { players, timeLimit: (Right tL) } -> H.raise $ mkTimer tL state.players
+        _ -> pure unit

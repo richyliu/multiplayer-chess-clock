@@ -2,8 +2,11 @@ module AppPrelude (module Exports) where
 
 -- Export the things we care about
 import Effect (Effect) as Exports
+import Effect.Class (class MonadEffect) as Exports
+import Effect.Aff.Class (class MonadAff) as Exports
 import Data.Maybe (Maybe(..)) as Exports
 import Data.Foldable (fold) as Exports
+import Data.Either (Either(..)) as Exports
 import Type.Proxy (Proxy(..)) as Exports
 
 -- Re-export what the Prelude module (as of prelude v5.0.0) rexports:
