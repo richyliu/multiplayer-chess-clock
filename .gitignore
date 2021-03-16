@@ -1,15 +1,13 @@
-/bower_components/
 /node_modules/
-/.pulp-cache/
 /output/
-/generated-docs/
 /.psc-package/
 /.psc*
 /.purs*
 /.psa*
 /.spago
 
-dist/
-.cache/
-public/tailwind.css
-out.js
+/dist/
+/.parcel-cache/
+/out_purs.js
+/public/bundle.js
+/public/.css_bundle/

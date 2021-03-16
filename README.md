@@ -2,10 +2,10 @@
 
 ## Development
 
-Make sure you have spago and parcel installed:
+Make sure you have spago installed:
 
 ```
-npm install -g spago parcel
+npm install -g spago
 ```
 
 Install dependencies:
@@ -20,7 +20,22 @@ To run a development server, run:
 npm run start
 ```
 
-This will run spago to compile purescript and parcel to bundle the files.
+### Build structure (development)
+
+Note that you must run `spago build` before the very first time you run `npm run
+start` (and any time the `output/` directory is removed).
+
+CSS files are bundled with parcel (which uses PostCSS to bundle Tailwind) to
+`public/.css_bundle/`.
+
+JS files are bundled with esbuild to `public/bundle.js`.
+
+Purescript files are built with spago (this is not necessary if your editor
+integration already auto runs spago build).
+
+For development, the HTML is served with live-server.
+
+If there is an error relating to Tailwind, just re-run `npm run start`.
 
 ## Directory structure
 

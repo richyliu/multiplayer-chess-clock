@@ -3,24 +3,31 @@
   "version": "0.1.0",
   "description": "Multiplayer chess clock webapp written with Purecsript",
   "scripts": {
-    "start": "npm run bundle-css && concurrently npm:serve-*",
-    "serve-js": "rm -rf ./dist; parcel public/index.html --no-source-maps --open",
+    "start": "concurrently npm:serve-*",
+    "start-no-purs": "concurrently npm:serve-html npm:serve-css npm:serve-js",
+    "serve-html": "npx live-server --port=8000 --watch=public/bundle.js,public/.css_bundle/index.css --open=public/index.html",
+    "serve-css": "parcel watch public/index.css --no-source-maps --dist-dir public/.css_bundle",
+    "serve-js": "npx esbuild public/index.js --bundle --watch '--define:process.env.NODE_ENV=\"\"' --outfile=public/bundle.js",
     "serve-purs": "spago build --watch",
-    "build": "npm run bundle-css && npm run bundle-purs && npm run bundle-js && npm run clean-purs",
-    "bundle-css": "npx tailwindcss build -o public/tailwind.css",
-    "bundle-purs": "spago bundle-app --to out.js",
-    "clean-purs": "rm out.js",
-    "bundle-js": "rm -rf ./dist; parcel build public/index.html --no-source-maps",
-    "prod": "NODE_ENV=production npm run bundle-css && npm run bundle-purs && npm run bundle-js && npm run clean-purs",
-    "clean": "rm -r output/; rm -rf dist/; rm -rf .cache/; rm public/tailwind.css; rm out.js"
+    "build": "npm run bundle-purs && npm run bundle-css && npm run bundle-js && npm run bundle-html",
+    "bundle-purs": "spago bundle-app --to out_purs.js",
+    "bundle-css": "parcel build public/index.css --no-source-maps --dist-dir public/.css_bundle",
+    "bundle-js": "npx esbuild public/index.js --bundle --minify '--define:process.env.NODE_ENV=\"production\"' --outfile=public/bundle.js",
+    "bundle-html": "rm -rf dist/; parcel build public/index.html --no-source-maps",
+    "clean": "rm -r output/; rm -rf dist/; rm -rf .parcel-cache/; rm -f out_purs.js; rm -f public/bundle.js; rm -rf public/.css_bundle"
   },
   "license": "MIT",
   "dependencies": {
     "autoprefixer": "^10.2.4",
+    "esbuild": "^0.9.2",
+    "parcel": "^2.0.0-beta.2",
     "tailwindcss": "^2.0.3"
   },
   "devDependencies": {
+    "@tailwindcss/jit": "^0.1.1",
     "concurrently": "^6.0.0",
-    "cssnano": "^4.1.10"
+    "cssnano": "^4.1.10",
+    "live-server": "^1.2.1",
+    "postcss": "^8.2.8"
   }
 }
