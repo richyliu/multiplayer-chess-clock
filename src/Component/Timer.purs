@@ -1,22 +1,23 @@
 module Component.Timer where
 
 import AppPrelude
-import Component.HTML.Timer (renderTimer)
 import Control.Monad.Rec.Class (forever)
 import Data.DateTime.Instant (unInstant)
-import Data.Time.Duration (Milliseconds(..))
+import Data.Player (Player)
+import Data.Time.Duration (Milliseconds(..), negateDuration)
+import Data.Timer (TimeControl, Timer, nextPlayer, tickCur)
+import Data.ChessTime (formatMilliseconds)
 import Effect.Aff as Aff
-import Data.Timer (Timer, nextPlayer, tick)
 import Effect.Now (now)
 import Halogen as H
 import Halogen.HTML as HH
+import Halogen.HTML.Events as HE
 import Halogen.Subscription as HS
 import Util (class_)
 
 type State
   = { timer :: Timer
     , timerTickInterval :: Milliseconds
-    , timerSubId :: Maybe H.SubscriptionId
     , lastTime :: Maybe Milliseconds
     }
 
@@ -25,11 +26,14 @@ data Action
   | SwitchPlayer
   | Tick
 
+type Output
+  = Player
+
 component ::
-  forall query output m.
+  forall query m.
   MonadEffect m =>
   MonadAff m =>
-  H.Component query Timer output m
+  H.Component query Timer Output m
 component =
   H.mkComponent
     { initialState
@@ -45,8 +49,7 @@ component =
   initialState :: Timer -> State
   initialState initialTimer =
     { timer: initialTimer
-    , timerSubId: Nothing
-    , timerTickInterval: Milliseconds 100.0
+    , timerTickInterval: Milliseconds 20.0
     , lastTime: Nothing
     }
 
@@ -54,51 +57,53 @@ component =
   render state =
     HH.div
       [ class_ [ "m-2" ] ]
-      [ HH.p_ [ HH.text "hello" ]
-      , HH.p_ [ HH.text $ show $ state.timer ]
-      , renderTimer SwitchPlayer state.timer
+      [ HH.h1
+          [ class_ [ "mt-4", "mb-2", "text-2xl" ] ]
+          [ HH.text "Timer" ]
+      , HH.div_ $ (renderPlayer false <$> state.timer.prev)
+          <> [ renderPlayer true state.timer.cur ]
+          <> (renderPlayer false <$> state.timer.next)
+      , HH.button
+          [ class_
+              [ "my-2"
+              , "p-3"
+              , "border"
+              , "border-gray-300"
+              , "rounded-lg"
+              , "hover:bg-gray-100"
+              , "transition"
+              , "duration-100"
+              ]
+          , HE.onClick \_ -> SwitchPlayer
+          ]
+          [ HH.text "click to switch time" ]
       ]
 
-  handleAction :: forall o. Action -> H.HalogenM State Action () o m Unit
+  handleAction :: Action -> H.HalogenM State Action () Output m Unit
   handleAction = case _ of
     StartTimer -> do
       state <- H.get
-      case state.timerSubId of
-        Just oldId -> H.unsubscribe oldId
-        Nothing -> pure unit
-      id <- H.subscribe =<< timerSub state.timerTickInterval Tick
+      _ <- H.subscribe =<< timerSub state.timerTickInterval Tick
       nowInstant <- H.liftEffect now
       let
         nowMs = unInstant nowInstant
-      H.put
-        $ state
-            { timer = state.timer
-            , timerSubId = Just id
-            , lastTime = Just nowMs
-            }
-      pure unit
-    SwitchPlayer ->
-      H.modify_ \state ->
-        state { timer = nextPlayer state.timer }
+      H.modify_ \s ->
+        s
+          { timer = state.timer
+          , lastTime = Just nowMs
+          }
+    SwitchPlayer -> H.modify_ \s -> s { timer = nextPlayer s.timer }
     Tick -> do
-      state@{ lastTime: maybeLastTime, timer } <- H.get
-      -- update time of the current player with the time difference
-      nowInstant <- H.liftEffect now
-      let
-        nowMs = unInstant nowInstant
-      case maybeLastTime of
-        Just (Milliseconds lastTime) ->
-          let
-            (Milliseconds nowTime) = nowMs
-
-            diff = nowTime - lastTime
-          in
-            when (diff > 0.0)
-              $ H.put
-              $ state
-                  { timer = timer { cur = tick (Milliseconds diff) timer.cur }
-                  , lastTime = Just nowMs
-                  }
+      state <- H.get
+      -- update time of the current player with the time difference between now and lastTime
+      nowMs <- unInstant <$> H.liftEffect now
+      case state.lastTime of
+        Just lastMs -> do
+          H.modify_ \s -> s { lastTime = Just nowMs }
+          case tickCur (nowMs <> negateDuration lastMs) state.timer of
+            Just newTimer -> H.modify_ \s -> s { timer = newTimer }
+            -- output current player if they run out of time
+            Nothing -> H.raise state.timer.cur.player
         Nothing -> pure unit
 
 timerSub :: forall m a. MonadAff m => Milliseconds -> a -> m (HS.Emitter a)
@@ -110,3 +115,14 @@ timerSub duration val = do
           Aff.delay duration
           H.liftEffect $ HS.notify listener val
   pure emitter
+
+renderPlayer :: forall p a. Boolean -> TimeControl -> HH.HTML p a
+renderPlayer isActive { player, timeRemaining } =
+  HH.div
+    [ class_ [ "my-1" ] ]
+    [ HH.h3
+        [ class_ [ if isActive then "text-red-500" else "" ]
+        ]
+        [ HH.text $ "Player: " <> player.name ]
+    , HH.p [ class_ [ "font-mono" ] ] [ HH.text $ formatMilliseconds timeRemaining ]
+    ]

@@ -6,6 +6,7 @@ You can edit this file as you like.
 , dependencies =
   [ "console"
   , "datetime"
+  , "debug"
   , "effect"
   , "halogen"
   , "halogen-subscriptions"

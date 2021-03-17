@@ -7,8 +7,9 @@ import Data.Array (uncons, snoc)
 import Data.Array.NonEmpty (NonEmptyArray, head, tail)
 
 type Timer
-  = { cur :: TimeControl
-    , rest :: Array TimeControl
+  = { prev :: Array TimeControl
+    , cur :: TimeControl
+    , next :: Array TimeControl
     }
 
 type TimeControl
@@ -16,24 +17,41 @@ type TimeControl
     , timeRemaining :: Milliseconds
     }
 
-tick :: Milliseconds -> TimeControl -> TimeControl
+tick :: Milliseconds -> TimeControl -> Maybe TimeControl
 tick (Milliseconds delta) tc =
   let
     (Milliseconds ms) = tc.timeRemaining
-  in
-    tc { timeRemaining = Milliseconds $ max 0.0 (ms - delta) }
 
--- Change cur to the next player and put the old cur to the end of player list (rest)
+    newTime = ms - delta
+  in
+    if newTime > 0.0 then
+      Just $ tc { timeRemaining = Milliseconds newTime }
+    else
+      Nothing
+
+tickCur :: Milliseconds -> Timer -> Maybe Timer
+tickCur ms timer = (timer { cur = _ }) <$> tick ms timer.cur
+
+-- Change cur to the next player and put the old cur into prev
 nextPlayer :: Timer -> Timer
-nextPlayer { cur, rest } = case uncons rest of
+nextPlayer { prev, cur, next } = case uncons next of
   Just { head, tail } ->
-    { cur: head
-    , rest: snoc tail cur
+    { prev: snoc prev cur
+    , cur: head
+    , next: tail
     }
-  Nothing -> { cur, rest }
+  -- wrap around to the beginning
+  Nothing -> case uncons prev of
+    Just { head, tail } ->
+      { prev: []
+      , cur: head
+      , next: snoc tail cur
+      }
+    Nothing -> { prev: [], cur: cur, next: [] }
 
 mkTimer :: Milliseconds -> NonEmptyArray Player -> Timer
 mkTimer timeRemaining players =
-  { cur: ({ player: _, timeRemaining }) $ head players
-  , rest: ({ player: _, timeRemaining }) <$> tail players
+  { prev: []
+  , cur: ({ player: _, timeRemaining }) $ head players
+  , next: ({ player: _, timeRemaining }) <$> tail players
   }
