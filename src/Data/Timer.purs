@@ -32,6 +32,17 @@ tick (Milliseconds delta) tc =
 tickCur :: Milliseconds -> Timer -> Maybe Timer
 tickCur ms timer = (timer { cur = _ }) <$> tick ms timer.cur
 
+incrementTime :: Milliseconds -> Timer -> Timer
+incrementTime (Milliseconds ms) timer =
+  timer
+    { cur =
+      timer.cur
+        { timeRemaining = Milliseconds $ oldTime + ms
+        }
+    }
+  where
+  (Milliseconds oldTime) = timer.cur.timeRemaining
+
 -- Change cur to the next player and put the old cur into prev
 nextPlayer :: Timer -> Timer
 nextPlayer { prev, cur, next } = case uncons next of

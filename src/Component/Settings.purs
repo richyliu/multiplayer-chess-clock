@@ -1,7 +1,6 @@
 module Component.Settings where
 
 import AppPrelude
-
 import Data.Array.NonEmpty (NonEmptyArray, singleton, fromArray)
 import Data.Number (fromString)
 import Data.Player (Player)
@@ -114,7 +113,7 @@ component =
       newLimit = case fromString s of
         Just timeLimit ->
           if timeLimit > 0.0 then
-            Right $ Milliseconds timeLimit
+            Right $ Milliseconds $ timeLimit * 1000.0
           else
             Left TimeLimitNonPositive
         Nothing -> Left TimeLimitNotANumber
